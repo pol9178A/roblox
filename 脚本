@@ -1,0 +1,797 @@
+local HttpService = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Plr = game:GetService("Players")
+local LP = Plr.LocalPlayer
+
+local Part = Instance.new("Part", workspace)
+Part.Material = Enum.Material.ForceField
+Part.Anchored = true
+Part.CanCollide = false
+Part.CastShadow = false
+Part.Shape = Enum.PartType.Ball
+Part.Color = Color3.fromRGB(132, 0, 255)
+Part.Transparency = 0.5
+
+local BaseGui = Instance.new("ScreenGui", game.CoreGui)
+BaseGui.Name = "BaseGui"
+
+local TL = Instance.new("TextLabel", BaseGui)
+TL.Name = "TL"
+TL.Parent = BaseGui
+TL.BackgroundColor3 = Color3.new(1, 1, 1)
+TL.BackgroundTransparency = 1
+TL.BorderColor3 = Color3.new(0, 0, 0)
+TL.Position = UDim2.new(0.95, -300, 0.85, 0)
+TL.Size = UDim2.new(0, 300, 0, 50)
+TL.FontFace = Font.new("rbxassetid://12187370000", Enum.FontWeight.Bold)
+TL.Text = ""
+TL.TextColor3 = Color3.new(1, 1, 1)
+TL.TextScaled = true
+TL.TextSize = 14
+TL.TextWrapped = true
+TL.Visible = true
+TL.RichText = true
+
+local function rainbowColor(hue)
+  return Color3.fromHSV(hue, 1, 1)
+end
+
+local function updateRainbowText(distance, ballSpeed, spamRadius, minDistance)
+  local hue = (tick() * 0.1) % 1
+  local color1 = rainbowColor(hue)
+  local color2 = rainbowColor((hue + 0.3) % 1)
+  local color3 = rainbowColor((hue + 0.6) % 1)
+  local color4 = rainbowColor((hue + 0.9) % 1)
+
+  TL.Text = string.format(
+  "<font color='#%s'>distance: %s</font>\n"..
+  "<font color='#%s'>ballSpeed: %s</font>\n"..
+  "<font color='#%s'>spamRadius: %s</font>\n"..
+  "<font color='#%s'>minDistance: %s</font>",
+  color1:ToHex(), tostring(distance),
+  color2:ToHex(), tostring(ballSpeed),
+  color3:ToHex(), tostring(spamRadius),
+  color4:ToHex(), tostring(minDistance)
+  )
+end
+
+local last1, last2
+local Cam = workspace.CurrentCamera
+
+local function ZJ()
+  local Nearest, Min = nil, math.huge
+  for A, B in next, workspace.Alive:GetChildren() do
+    if B.Name ~= LP.Name and B:FindFirstChild("HumanoidRootPart") then
+      local distance = LP:DistanceFromCharacter(B:GetPivot().Position)
+      if distance < Min then
+        Min = distance
+        Nearest = B
+      end
+    end
+  end
+  return Min
+end
+
+local function Parry()
+  task.spawn(function() game:GetService("VirtualInputManager"):SendMouseButtonEvent(0, 0, 0, true, nil, 0) end)
+end
+
+local function GetBall()
+  for a, b in next, workspace.Balls:GetChildren() do
+    if b:IsA("BasePart") and b:GetAttribute("realBall") then
+      return b
+    end
+  end
+end
+
+local function IsTarget(a)
+  return a:GetAttribute("target") == LP.Name
+end
+
+local function IsSpamming(a, b)
+  if not type(last1) == "number" then return false end
+  if not type(last2) == "number" then return false end
+  if last1 - last2 > 0.8 then
+    return false
+  end
+  if a > b then
+    return false
+  end
+  if #workspace.Alive:GetChildren() <= 1 then
+    return false
+  end
+  return true
+end
+
+local function addRainbowTitleToLocalPlayer(player, titleText)
+    local function addTitleToCharacter(character)
+        local head = character:FindFirstChild("Head") or character:WaitForChild("Head")
+        local old = head:FindFirstChild("PlayerTitle")
+        if old then old:Destroy() end
+        local billboardGui = Instance.new("BillboardGui")
+        billboardGui.Name = "PlayerTitle"
+        billboardGui.Adornee = head
+        billboardGui.Size = UDim2.new(4, 0, 1, 0)
+        billboardGui.StudsOffset = Vector3.new(0, 2, 0)
+        billboardGui.AlwaysOnTop = true
+        billboardGui.MaxDistance = 1000
+        local textLabel = Instance.new("TextLabel")
+        textLabel.Size = UDim2.new(1, 0, 1, 0)
+        textLabel.BackgroundTransparency = 1
+        textLabel.Text = titleText
+        textLabel.TextScaled = true
+        textLabel.Font = Enum.Font.GothamBold
+        textLabel.TextWrapped = true
+        textLabel.Parent = billboardGui
+        local stroke = Instance.new("UIStroke")
+        stroke.Thickness = 1
+        stroke.Color = Color3.new(1, 1, 1)
+        stroke.Parent = textLabel
+        local gradient = Instance.new("UIGradient")
+        gradient.Rotation = 90
+        gradient.Parent = textLabel
+        local connection
+        connection = game:GetService("RunService").RenderStepped:Connect(function()
+            local time = tick() * 0.5
+            gradient.Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, Color3.fromHSV(time % 1, 1, 1)),
+                ColorSequenceKeypoint.new(0.2, Color3.fromHSV((time + 0.2) % 1, 1, 1)),
+                ColorSequenceKeypoint.new(0.4, Color3.fromHSV((time + 0.4) % 1, 1, 1)),
+                ColorSequenceKeypoint.new(0.6, Color3.fromHSV((time + 0.6) % 1, 1, 1)),
+                ColorSequenceKeypoint.new(0.8, Color3.fromHSV((time + 0.8) % 1, 1, 1)),
+                ColorSequenceKeypoint.new(1, Color3.fromHSV(time % 1, 1, 1))
+            })
+        end)
+        billboardGui.AncestryChanged:Connect(function()
+            if not billboardGui:IsDescendantOf(game) then
+                if connection then connection:Disconnect() end
+            end
+        end)
+        billboardGui.Parent = head
+    end
+    local character = player.Character or player.CharacterAdded:Wait()
+    addTitleToCharacter(character)
+    player.CharacterAdded:Connect(addTitleToCharacter)
+end
+addRainbowTitleToLocalPlayer(LP, "AlienX VIP")
+local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Syndromehsh/Lua/baff0bc41893a32f8e997d840241ad4b3d26ab4d/AlienX/AlienX%20Wind%203.0%20UI.txt"))()
+
+local Window = WindUI:CreateWindow({
+    Title = 'AlienX<font color="#00FF00">2.0</font>/ 战争大亨|XI团队出品必是精品',
+    Icon = "rbxassetid://4483362748",
+    IconThemed = true,
+    Author = "AlienX",
+    Folder = "CloudHub",
+    Size = UDim2.fromOffset(580, 440),
+    Transparent = true,
+    Theme = "Dark",
+    User = {
+        Enabled = true,
+        Callback = function() print("clicked") end,
+        Anonymous = false
+    },
+    SideBarWidth = 200,
+    ScrollBarEnabled = true,
+})
+
+Window:EditOpenButton({
+    Title = "打开脚本",
+    Icon = "monitor",
+    CornerRadius = UDim.new(0,16),
+    StrokeThickness = 4,
+    Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromHex("FF0000")),
+        ColorSequenceKeypoint.new(0.16, Color3.fromHex("FF7F00")),
+        ColorSequenceKeypoint.new(0.33, Color3.fromHex("FFFF00")),
+        ColorSequenceKeypoint.new(0.5, Color3.fromHex("00FF00")),
+        ColorSequenceKeypoint.new(0.66, Color3.fromHex("0000FF")),
+        ColorSequenceKeypoint.new(0.83, Color3.fromHex("4B0082")),
+        ColorSequenceKeypoint.new(1, Color3.fromHex("9400D3"))
+    }),
+    Draggable = true,
+})
+
+local LockSection = Window:Section({
+    Title = "稳定功能",
+    Opened = true,
+})
+
+local function AddTab(section, title, icon)
+    return section:Tab({Title = title, Icon = icon})
+end
+
+local function Btn(tab, title, callback)
+    return tab:Button({Title = title, Callback = callback})
+end
+
+local function Tg(tab, title, value, callback)
+    return tab:Toggle({Title = title, Image = "bird", Value = value, Callback = callback})
+end
+
+local function Sld(tab, title, min, max, default, callback)
+    return tab:Slider({Title = title, Step = 1, Value = {Min = min, Max = max, Default = default}, Callback = callback})
+end
+
+local A = AddTab(LockSection, "传送", "rbxassetid://3944688398")
+local B = AddTab(LockSection, "自动", "rbxassetid://4450736564")
+local C = AddTab(LockSection, "透视", "rbxassetid://104955103991281")
+local D = AddTab(LockSection, "辅助", "rbxassetid://4483362458")
+local E = AddTab(LockSection, "自瞄", "rbxassetid://4483345998")
+
+local FunSection = Window:Section({
+    Title = "娱乐功能",
+    Opened = true,
+})
+
+local F = AddTab(FunSection, "攻击", "rbxassetid://4384392464")
+local G = AddTab(FunSection, "武器", "rbxassetid://94831304996747")
+local H = AddTab(FunSection, "玩家", "rbxassetid://4335480896")
+local I = AddTab(FunSection, "子追", "rbxassetid://4483345998")
+
+Window:SelectTab(1)
+
+local Players = game:GetService("Players")
+local LP = Players.LocalPlayer
+
+local PlayerList = {}
+for _, player in pairs(Players:GetPlayers()) do
+    if player ~= LP then
+        PlayerList[#PlayerList + 1] = player.Name
+    end
+end
+
+local Positions = {
+    ["Alpha"] = CFrame.new(-1197, 65, -4790),
+    ["Bravo"] = CFrame.new(-220, 65, -4919),
+    ["Charlie"] = CFrame.new(797, 65, -4740),
+    ["Delta"] = CFrame.new(2044, 65, -3984),
+    ["Echo"] = CFrame.new(2742, 65, -3031),
+    ["Foxtrot"] = CFrame.new(3045, 65, -1788),
+    ["Golf"] = CFrame.new(3376, 65, -562),
+    ["Hotel"] = CFrame.new(3290, 65, 587),
+    ["Juliet"] = CFrame.new(2955, 65, 1804),
+    ["Kilo"] = CFrame.new(2569, 65, 2926),
+    ["Lima"] = CFrame.new(989, 65, 3419),
+    ["Omega"] = CFrame.new(-319, 65, 3932),
+    ["Romeo"] = CFrame.new(-1479, 65, 3722),
+    ["Sierra"] = CFrame.new(-2528, 65, 2549),
+    ["Tango"] = CFrame.new(-3018, 65, 1503),
+    ["Victor"] = CFrame.new(-3587, 65, 634),
+    ["Yankee"] = CFrame.new(-3957, 65, -287),
+    ["Zulu"] = CFrame.new(-4049, 65, -1334)
+}
+
+Btn(A, "当前玩家基地: " .. LP.Team.Name, function() end)
+A:Dropdown({
+    Title = "传送基地", 
+    Values = {"Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Golf", "Hotel", "Juliet", "Kilo", "Lima", "Omega", "Romeo", "Sierra", "Tango", "Victor", "Yankee", "Zulu"}, 
+    Value = "Alpha", 
+    Callback = function(d) 
+        if LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") then
+            LP.Character:FindFirstChild("HumanoidRootPart").CFrame = Positions[d]
+        end
+    end
+})
+
+local function GetAvailableBases()
+    local bases = {}
+    if not ExcludedBases then
+        ExcludedBases = {}
+    end
+    if not workspace:FindFirstChild("Tycoon") or not workspace.Tycoon:FindFirstChild("Tycoons") then
+        warn("Tycoon or Tycoons folder not found")
+        return bases
+    end
+    
+    local tycoons = workspace.Tycoon.Tycoons:GetChildren()
+    for _, tycoon in ipairs(tycoons) do
+        if not table.find(ExcludedBases, tycoon.Name) then
+            table.insert(bases, tycoon.Name)
+        end
+    end
+    
+    return bases
+end
+
+local BasesDropdown = B:Dropdown({
+    Title = "基地白名单{排除列表}", 
+    Values = GetAvailableBases(), 
+    Multi = true, 
+    Default = {}, 
+    Callback = function(Values) 
+        ExcludedBases = Values 
+    end
+})
+
+Btn(B, "刷新基地列表", function()
+    BasesDropdown:Refresh(GetAvailableBases())
+end)
+
+Tg(B,"自动箱子",false,function(value)
+        getgenv().auto = value
+    end
+)
+
+Tg(B,"自动升级",false,function(value)
+        getgenv().autoTeleport = value
+    end
+)
+
+
+B:Divider()
+
+
+B:Button({
+    Title = "自动重生",
+    Description = "正在开发中..",
+    Locked = true,
+})
+
+B:Button({
+    Title = "自动空投",
+    Description = "正在开发中..",
+    Locked = true,
+})
+
+
+
+getgenv().ESPEnabled = false
+getgenv().ShowBox = false
+getgenv().ShowHealth = false
+getgenv().ShowName = false
+getgenv().ShowDistance = false
+getgenv().ShowTracer = false
+getgenv().TeamCheck = false
+getgenv().ShowSkeleton = false
+getgenv().ShowRadar = false
+getgenv().ShowPlayerCount = false
+getgenv().ShowWeapon = false
+getgenv().ShowFOV = false
+getgenv().OutOfViewArrows = false
+getgenv().Chams = false
+
+getgenv().TracerColor = Color3.new(1, 0, 0)
+getgenv().SkeletonColor = Color3.new(0.2, 0.8, 1)
+getgenv().BoxColor = Color3.new(1, 1, 1)
+getgenv().HealthBarColor = Color3.new(0, 1, 0)
+getgenv().HealthTextColor = Color3.new(1, 1, 1)
+getgenv().NameColor = Color3.new(1, 1, 1)
+getgenv().DistanceColor = Color3.new(1, 1, 0)
+getgenv().WeaponColor = Color3.new(1, 0.5, 0)
+getgenv().ArrowColor = Color3.new(1, 0, 0)
+getgenv().FOVColor = Color3.new(1, 1, 1)
+getgenv().ChamsColor = Color3.new(1, 0, 0)
+
+getgenv().BoxThickness = 1
+getgenv().TracerThickness = 1
+getgenv().SkeletonThickness = 2
+getgenv().FOVRadius = 100
+getgenv().ArrowSize = 15
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+
+local function getGradientColor(time)
+    local r = math.sin(time * 2) * 0.5 + 0.5
+    local g = math.sin(time * 3) * 0.5 + 0.5
+    local b = math.sin(time * 4) * 0.5 + 0.5
+    return Color3.new(r, g, b)
+end
+
+local playerCountText = Drawing.new("Text")
+playerCountText.Visible = false
+playerCountText.Color = Color3.new(1, 1, 1)
+playerCountText.Size = 20
+playerCountText.Font = Drawing.Fonts.Monospace
+playerCountText.Outline = true
+playerCountText.OutlineColor = Color3.new(0, 0, 0)
+playerCountText.Position = Vector2.new(Camera.ViewportSize.X / 2, 10)
+
+local fovCircle = Drawing.new("Circle")
+fovCircle.Visible = false
+fovCircle.Color = getgenv().FOVColor
+fovCircle.Thickness = 1
+fovCircle.Filled = false
+fovCircle.Radius = getgenv().FOVRadius
+fovCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+
+local function updatePlayerCount()
+    local playerCount = #Players:GetPlayers()
+    playerCountText.Text = "在线玩家: " .. playerCount
+    playerCountText.Visible = getgenv().ESPEnabled and getgenv().ShowPlayerCount
+
+    local time = tick()
+    playerCountText.Color = getGradientColor(time)
+end
+
+local function updateFOV()
+    fovCircle.Visible = getgenv().ShowFOV
+    fovCircle.Color = getgenv().FOVColor
+    fovCircle.Radius = getgenv().FOVRadius
+    fovCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+end
+
+local ESPComponents = {}
+
+local function createESP(player)
+    local box = Drawing.new("Square")
+    box.Visible = false
+    box.Color = getgenv().BoxColor
+    box.Thickness = getgenv().BoxThickness
+    box.Filled = false
+
+    local healthBar = Drawing.new("Square")
+    healthBar.Visible = false
+    healthBar.Color = getgenv().HealthBarColor
+    healthBar.Thickness = 1
+    healthBar.Filled = true
+
+    local healthBarBackground = Drawing.new("Square")
+    healthBarBackground.Visible = false
+    healthBarBackground.Color = Color3.new(0, 0, 0)
+    healthBarBackground.Transparency = 0.5
+    healthBarBackground.Thickness = 1
+    healthBarBackground.Filled = true
+
+    local healthBarBorder = Drawing.new("Square")
+    healthBarBorder.Visible = false
+    healthBarBorder.Color = Color3.new(1, 1, 1)
+    healthBarBorder.Thickness = 1
+    healthBarBorder.Filled = false
+
+    local healthText = Drawing.new("Text")
+    healthText.Visible = false
+    healthText.Color = getgenv().HealthTextColor
+    healthText.Size = 14
+    healthText.Font = Drawing.Fonts.Monospace
+    healthText.Outline = true
+    healthText.OutlineColor = Color3.new(0, 0, 0)
+
+    local nameText = Drawing.new("Text")
+    nameText.Visible = false
+    nameText.Color = getgenv().NameColor
+    nameText.Size = 16
+    nameText.Font = Drawing.Fonts.Monospace
+    nameText.Outline = true
+    nameText.OutlineColor = Color3.new(0, 0, 0)
+
+    local distanceText = Drawing.new("Text")
+    distanceText.Visible = false
+    distanceText.Color = getgenv().DistanceColor
+    distanceText.Size = 14
+    distanceText.Font = Drawing.Fonts.Monospace
+    distanceText.Outline = true
+    distanceText.OutlineColor = Color3.new(0, 0, 0)
+
+    local weaponText = Drawing.new("Text")
+    weaponText.Visible = false
+    weaponText.Color = getgenv().WeaponColor
+    weaponText.Size = 14
+    weaponText.Font = Drawing.Fonts.Monospace
+    weaponText.Outline = true
+    weaponText.OutlineColor = Color3.new(0, 0, 0)
+
+    local tracer = Drawing.new("Line")
+    tracer.Visible = false
+    tracer.Color = getgenv().TracerColor
+    tracer.Thickness = getgenv().TracerThickness
+
+    local arrow = Drawing.new("Triangle")
+    arrow.Visible = false
+    arrow.Color = getgenv().ArrowColor
+    arrow.Filled = true
+    arrow.Thickness = 1
+
+    local skeletonLines = {}
+    local skeletonPoints = {}
+
+    local function createSkeleton()
+        for i = 1, 15 do
+            skeletonLines[i] = Drawing.new("Line")
+            skeletonLines[i].Visible = false
+            skeletonLines[i].Color = getgenv().SkeletonColor
+            skeletonLines[i].Thickness = getgenv().SkeletonThickness
+        end
+
+        skeletonPoints["Head"] = Drawing.new("Circle")
+        skeletonPoints["Head"].Visible = false
+        skeletonPoints["Head"].Color = Color3.new(1, 0.5, 0)
+        skeletonPoints["Head"].Thickness = 2
+        skeletonPoints["Head"].Filled = true
+        skeletonPoints["Head"].Radius = 4
+    end
+
+    createSkeleton()
+
+    local lastHealth = 100
+    local healthChangeTime = 0
+    local smoothHealth = 100
+
+    ESPComponents[player] = {
+        box = box,
+        healthBar = healthBar,
+        healthBarBackground = healthBarBackground,
+        healthBarBorder = healthBarBorder,
+        healthText = healthText,
+        nameText = nameText,
+        distanceText = distanceText,
+        weaponText = weaponText,
+        tracer = tracer,
+        arrow = arrow,
+        skeletonLines = skeletonLines,
+        skeletonPoints = skeletonPoints
+    }
+
+    RunService.RenderStepped:Connect(function()
+        if not getgenv().ESPEnabled or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player == LocalPlayer then
+            box.Visible = false
+            healthBar.Visible = false
+            healthBarBackground.Visible = false
+            healthBarBorder.Visible = false
+            healthText.Visible = false
+            nameText.Visible = false
+            distanceText.Visible = false
+            weaponText.Visible = false
+            tracer.Visible = false
+            arrow.Visible = false
+            for _, line in pairs(skeletonLines) do
+                line.Visible = false
+            end
+            for _, point in pairs(skeletonPoints) do
+                point.Visible = false
+            end
+            return
+        end
+
+        if getgenv().TeamCheck and player.Team == LocalPlayer.Team then
+            box.Visible = false
+            healthBar.Visible = false
+            healthBarBackground.Visible = false
+            healthBarBorder.Visible = false
+            healthText.Visible = false
+            nameText.Visible = false
+            distanceText.Visible = false
+            weaponText.Visible = false
+            tracer.Visible = false
+            arrow.Visible = false
+            for _, line in pairs(skeletonLines) do
+                line.Visible = false
+            end
+            for _, point in pairs(skeletonPoints) do
+                point.Visible = false
+            end
+            return
+        end
+
+        local character = player.Character
+        local rootPart = character:FindFirstChild("HumanoidRootPart")
+        local humanoid = character:FindFirstChild("Humanoid")
+
+        if rootPart and humanoid and humanoid.Health > 0 then
+            local rootPos, onScreen = Camera:WorldToViewportPoint(rootPart.Position)
+            local headPos, _ = Camera:WorldToViewportPoint(rootPart.Position + Vector3.new(0, 3, 0))
+            local legPos, _ = Camera:WorldToViewportPoint(rootPart.Position - Vector3.new(0, 3, 0))
+
+            local weaponName = "无武器"
+            for _, tool in ipairs(character:GetChildren()) do
+                if tool:IsA("Tool") then
+                    weaponName = tool.Name
+                    break
+                end
+            end
+
+            if getgenv().ShowBox and onScreen then
+                box.Size = Vector2.new(1000 / rootPos.Z, headPos.Y - legPos.Y)
+                box.Position = Vector2.new(rootPos.X - box.Size.X / 2, rootPos.Y - box.Size.Y / 2)
+                box.Visible = true
+                box.Color = getgenv().BoxColor
+                box.Thickness = getgenv().BoxThickness
+            else
+                box.Visible = false
+            end
+
+            if getgenv().ShowHealth and onScreen then
+                local healthPercentage = humanoid.Health / humanoid.MaxHealth
+                local barWidth = 50
+                local barHeight = 5
+                local barX = headPos.X - barWidth / 2
+                local barY = headPos.Y - 20
+
+                healthBarBackground.Size = Vector2.new(barWidth, barHeight)
+                healthBarBackground.Position = Vector2.new(barX, barY)
+                healthBarBackground.Visible = true
+
+                healthBarBorder.Size = Vector2.new(barWidth, barHeight)
+                healthBarBorder.Position = Vector2.new(barX, barY)
+                healthBarBorder.Visible = true
+
+                smoothHealth = smoothHealth + (humanoid.Health - smoothHealth) * 0.1
+                local smoothHealthPercentage = smoothHealth / humanoid.MaxHealth
+
+                healthBar.Size = Vector2.new(barWidth * smoothHealthPercentage, barHeight)
+                healthBar.Position = Vector2.new(barX, barY)
+
+                if smoothHealthPercentage >= 0.8 then
+                    healthBar.Color = Color3.new(0, 1, 0)
+                elseif smoothHealthPercentage >= 0.5 then
+                    healthBar.Color = Color3.new(1, 1, 0)
+                elseif smoothHealthPercentage >= 0.2 then
+                    healthBar.Color = Color3.new(1, 0.5, 0)
+                else
+                    healthBar.Color = Color3.new(1, 0, 0)
+                end
+
+                healthBar.Visible = true
+
+                if humanoid.Health ~= lastHealth then
+                    healthChangeTime = tick()
+                    lastHealth = humanoid.Health
+                end
+
+                if tick() - healthChangeTime < 0.5 then
+                    healthBar.Color = Color3.new(1, 0, 0)
+                end
+
+                healthText.Position = Vector2.new(barX + barWidth + 5, barY - 5)
+                healthText.Text = math.floor(humanoid.Health) .. "/" .. math.floor(humanoid.MaxHealth)
+                healthText.Visible = true
+            else
+                healthBar.Visible = false
+                healthBarBackground.Visible = false
+                healthBarBorder.Visible = false
+                healthText.Visible = false
+            end
+
+            if getgenv().ShowName and onScreen then
+                nameText.Position = Vector2.new(headPos.X, headPos.Y - 35)
+                nameText.Text = player.Name
+                nameText.Visible = true
+
+                if getgenv().ShowDistance then
+                    local distance = (LocalPlayer.Character.HumanoidRootPart.Position - rootPart.Position).Magnitude
+                    distanceText.Position = Vector2.new(headPos.X, headPos.Y + 10)
+                    distanceText.Text = math.floor(distance) .. "m"
+                    distanceText.Visible = true
+                else
+                    distanceText.Visible = false
+                end
+
+                if getgenv().ShowWeapon then
+                    weaponText.Position = Vector2.new(headPos.X, headPos.Y - 50)
+                    weaponText.Text = weaponName
+                    weaponText.Visible = true
+                else
+                    weaponText.Visible = false
+                end
+            else
+                nameText.Visible = false
+                distanceText.Visible = false
+                weaponText.Visible = false
+            end
+
+            if getgenv().ShowTracer then
+                local head = character:FindFirstChild("Head")
+                if head then
+                    local headPos, onScreen = Camera:WorldToViewportPoint(head.Position)
+                    if onScreen then
+                        tracer.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+                        tracer.To = Vector2.new(headPos.X, headPos.Y)
+                        tracer.Visible = true
+                        tracer.Color = getgenv().TracerColor
+                        tracer.Thickness = getgenv().TracerThickness
+                        
+                        local distance = (LocalPlayer.Character.HumanoidRootPart.Position - rootPart.Position).Magnitude
+                        if distance < 20 then
+                            tracer.Color = Color3.new(0, 1, 0)
+                        elseif distance < 50 then
+                            tracer.Color = Color3.new(1, 1, 0) 
+                        else
+                            tracer.Color = getgenv().TracerColor 
+                        end
+                    else
+                        tracer.Visible = false
+                    end
+                else
+                    tracer.Visible = false
+                end
+            else
+                tracer.Visible = false
+            end
+
+            if getgenv().OutOfViewArrows and not onScreen then
+                local direction = (rootPart.Position - Camera.CFrame.Position).Unit
+                local dotProduct = Camera.CFrame.RightVector:Dot(direction)
+                local crossProduct = Camera.CFrame.RightVector:Cross(direction)
+                
+                local screenPosition = Vector2.new(
+                    Camera.ViewportSize.X / 2 + dotProduct * Camera.ViewportSize.X / 3,
+                    Camera.ViewportSize.Y / 2 - crossProduct.Y * Camera.ViewportSize.Y / 3
+                )
+                
+                screenPosition = Vector2.new(
+                    math.clamp(screenPosition.X, getgenv().ArrowSize, Camera.ViewportSize.X - getgenv().ArrowSize),
+                    math.clamp(screenPosition.Y, getgenv().ArrowSize, Camera.ViewportSize.Y - getgenv().ArrowSize)
+                )
+                
+                local angle = math.atan2(screenPosition.Y - Camera.ViewportSize.Y / 2, screenPosition.X - Camera.ViewportSize.X / 2)
+                
+                arrow.PointA = screenPosition
+                arrow.PointB = Vector2.new(
+                    screenPosition.X - getgenv().ArrowSize * math.cos(angle - 0.5),
+                    screenPosition.Y - getgenv().ArrowSize * math.sin(angle - 0.5)
+                )
+                arrow.PointC = Vector2.new(
+                    screenPosition.X - getgenv().ArrowSize * math.cos(angle + 0.5),
+                    screenPosition.Y - getgenv().ArrowSize * math.sin(angle + 0.5)
+                )
+                
+                arrow.Color = getgenv().ArrowColor
+                arrow.Visible = true
+            else
+                arrow.Visible = false
+            end
+
+            if getgenv().ShowSkeleton and onScreen then
+                local head = character:FindFirstChild("Head")
+                local torso = character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
+                local leftArm = character:FindFirstChild("Left Arm") or character:FindFirstChild("LeftUpperArm")
+                local rightArm = character:FindFirstChild("Right Arm") or character:FindFirstChild("RightUpperArm")
+                local leftLeg = character:FindFirstChild("Left Leg") or character:FindFirstChild("LeftUpperLeg")
+                local rightLeg = character:FindFirstChild("Right Leg") or character:FindFirstChild("RightUpperLeg")
+                
+                if head and torso and leftArm and rightArm and leftLeg and rightLeg then
+                    local headPos = Camera:WorldToViewportPoint(head.Position)
+                    local torsoPos = Camera:WorldToViewportPoint(torso.Position)
+                    local leftArmPos = Camera:WorldToViewportPoint(leftArm.Position)
+                    local rightArmPos = Camera:WorldToViewportPoint(rightArm.Position)
+                    local leftLegPos = Camera:WorldToViewportPoint(leftLeg.Position)
+                    local rightLegPos = Camera:WorldToViewportPoint(rightLeg.Position)
+
+                    skeletonPoints["Head"].Position = Vector2.new(headPos.X, headPos.Y)
+                    skeletonPoints["Head"].Visible = true
+
+                    skeletonLines[1].From = Vector2.new(headPos.X, headPos.Y)
+                    skeletonLines[1].To = Vector2.new(torsoPos.X, torsoPos.Y) 
+                    skeletonLines[1].Visible = true
+
+                    skeletonLines[2].From = Vector2.new(torsoPos.X, torsoPos.Y)
+                    skeletonLines[2].To = Vector2.new(leftArmPos.X, leftArmPos.Y)
+                    skeletonLines[2].Visible = true
+
+                    skeletonLines[3].From = Vector2.new(torsoPos.X, torsoPos.Y)
+                    skeletonLines[3].To = Vector2.new(rightArmPos.X, rightArmPos.Y)
+                    skeletonLines[3].Visible = true
+
+                    skeletonLines[4].From = Vector2.new(torsoPos.X, torsoPos.Y)
+                    skeletonLines[4].To = Vector2.new(leftLegPos.X, leftLegPos.Y)
+                    skeletonLines[4].Visible = true
+
+                    skeletonLines[5].From = Vector2.new(torsoPos.X, torsoPos.Y)
+                    skeletonLines[5].To = Vector2.new(rightLegPos.X, rightLegPos.Y)
+                    skeletonLines[5].Visible = true
+
+                    if character:FindFirstChild("LeftLowerArm") then
+                        local leftLowerArmPos = Camera:WorldToViewportPoint(character.LeftLowerArm.Position)
+                        skeletonLines[6].From = Vector2.new(leftArmPos.X, leftArmPos.Y)
+                        skeletonLines[6].To = Vector2.new(leftLowerArmPos.X, leftLowerArmPos.Y)
+                        skeletonLines[6].Visible = true
+                    end
+
+                    if character:FindFirstChild("RightLowerArm") then
+                        local rightLowerArmPos = Camera:WorldToViewportPoint(character.RightLowerArm.Position)
+                        skeletonLines[7].From = Vector2.new(rightArmPos.X, rightArmPos.Y)
+                        skeletonLines[7].To = Vector2.new(rightLowerArmPos.X, rightLowerArmPos.Y)
+                        skeletonLines[7].Visible = true
+                    end
+
+                    if character:FindFirstChild("LeftLowerLeg") then
+                        local leftLowerLegPos = Camera:WorldToViewportPoint(character.LeftLowerLeg.Position)
+                        skeletonLines[8].From = Vector2.new(leftLegPos.X, leftLegPos.Y)
+                        skeletonLines[8].To = Vector2.new(leftLowerLegPos.X, leftLowerLegPos.Y)
+                        skeletonLines[8].Visible = true
+                    end
+
+                    if character:FindFirstChild("RightLowerLeg") then
+                        local rightLowerLegPos = Camera:WorldToViewportPoint(character.RightLowerLeg
